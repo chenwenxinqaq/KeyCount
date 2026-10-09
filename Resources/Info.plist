@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>KeyCount</string>
+    <key>CFBundleDisplayName</key>
+    <string>KeyCount</string>
+    <key>CFBundleExecutable</key>
+    <string>KeyCount</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.local.keycount</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.7.0</string>
+    <key>CFBundleVersion</key>
+    <string>12</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>KeyCount 在本机统计按键次数和活动分布，不保存按键内容，也不上传数据。</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>KeyCount — 每一次落笔，都算数。</string>
+</dict>
+</plist>
