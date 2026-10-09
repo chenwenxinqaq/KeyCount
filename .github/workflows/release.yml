@@ -7,27 +7,59 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag, for example v1.7.0"
+        description: "Existing release tag, for example v1.7.0"
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
-  build-release:
-    runs-on: macos-14
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      KEYCOUNT_SIGN_ID: "-"
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
 
-      - name: Show toolchain
+      - name: Check version and toolchain
         run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "Release tag must match the app version: v$version" >&2
+            exit 1
+          fi
+          test "$(uname -m)" = "${{ matrix.arch }}"
           sw_vers
-          swift --version
-          xcodebuild -version || true
+          xcrun swift --version
+          xcodebuild -version
+          printf 'KEYCOUNT_SDK=%s\n' "$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+
+      - name: Run tests and checks
+        env:
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/clang-module-cache
+          SWIFT_MODULECACHE_PATH: ${{ runner.temp }}/swift-module-cache
+        run: ./test.sh
 
       - name: Build local app bundle
         env:
@@ -38,19 +70,50 @@ jobs:
       - name: Package local DMG
         run: ./make_dmg.sh --local
 
+      - name: Save DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: dist/KeyCount-*-local.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out release notes
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
+
+      - name: Download both DMGs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dmg-*
+          merge-multiple: true
+          path: dist
+
       - name: Create checksums
+        working-directory: dist
         run: |
-          cd dist
-          shasum -a 256 KeyCount-*.dmg > SHA256SUMS
+          version="${RELEASE_TAG#v}"
+          test -s "KeyCount-${version}-arm64-local.dmg"
+          test -s "KeyCount-${version}-x86_64-local.dmg"
+          sha256sum KeyCount-*-local.dmg > SHA256SUMS
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" \
-            --target "$GITHUB_SHA" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
             --title "KeyCount ${RELEASE_TAG}" \
-            --generate-notes \
-            dist/KeyCount-*.dmg \
+            --notes-file .github/RELEASE_NOTES.md \
+            dist/KeyCount-*-local.dmg \
             dist/SHA256SUMS

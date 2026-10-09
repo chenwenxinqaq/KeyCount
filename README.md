@@ -95,9 +95,10 @@
 - 临时签名包必须用 `--local` 明确打包；默认不再把它当作正式分发包。
 
 这些改动消除代码侧的重复触发风险，不等于已验证每台机器的系统授权状态。
-上一版使用 ad-hoc 签名，其 designated requirement 是构建内容的 cdhash，
-不能作为跨构建稳定的发布者身份。正式分发仍需自己的 Developer ID 与公证；
-公证也不替代用户对辅助功能、输入监控的授权。
+ad-hoc 签名的 designated requirement 包含构建内容的 cdhash，
+不能作为跨构建稳定的发布者身份。GitHub Release 可以发布未公证的 ad-hoc 包，
+首次安装需按下文手动允许，更新后可能需要重新授权。Developer ID 与公证是可选的
+分发升级方案，也不替代用户对辅助功能、输入监控的授权。
 
 ## 1.4 界面更新
 
@@ -121,16 +122,19 @@ open KeyCount.app          # 手动启动工作区应用
 
 ## macOS 安装
 
-从 GitHub Release 下载 `.dmg` 后：
+从 GitHub Release 下载与你的 Mac 对应的 `.dmg`：Apple Silicon（M 系列芯片）
+选择 `arm64-local.dmg`，Intel Mac 选择 `x86_64-local.dmg`。
 
 1. 打开磁盘映像，把 `KeyCount.app` 拖到“应用程序”文件夹。
 2. 推出 `.dmg`，再从“应用程序”文件夹启动 KeyCount。
-3. 如果 macOS 首次启动时拦截应用，打开“系统设置 → 隐私与安全性”，
-   在安全性区域点击“仍要打开”，确认后重新启动 KeyCount。
+3. 如果 macOS 提示无法验证开发者或应用未公证，打开“系统设置 → 隐私与安全性”，
+   在安全性区域点击“仍要打开”，随后在弹窗中点击“打开”，按提示完成认证。
 
-GitHub Release 提供的是本地测试包，可能没有 Apple 公证。这个提示只需要在首次打开时处理；
-不需要关闭 Gatekeeper，也不要从 DMG 内长期运行应用。首次启动后，再按应用内提示授予辅助功能权限；
-需要按键统计时，再开启输入监控权限。
+GitHub Release 提供 ad-hoc 签名、未公证的 DMG，无需关闭 Gatekeeper。
+首次安装或更换构建后可能需要再次允许打开或重新授予权限。
+辅助功能和输入监控权限仍需按应用内提示单独开启；不要从 DMG 内长期运行应用。
+
+### 本机构建签名
 
 签名身份按此优先级选择，脚本从不自动导入私钥：
 
@@ -155,8 +159,8 @@ ad-hoc 则每次构建 cdhash 都变，更新后往往要重新授权。
 
 脚本创建专用钥匙串 `~/Library/Keychains/keycount-signing.keychain-db`，
 用本地口令授权 `codesign` 无弹窗使用私钥。签名私钥和证书只应放在本机的
-`certs/` 目录中；该目录已被 Git 忽略，**不会提交到公开仓库**。此身份仅供本机自用。
-自签名**未公证**：首次打开仍需右键→打开。从 ad-hoc 切到自签名时，
+`certs/` 目录中；该目录已被 Git 忽略，**不会提交到仓库**。此身份仅供本机自用。
+自签名**未公证**：首次被拦截时按上面的“仍要打开”流程操作。从 ad-hoc 切到自签名时，
 系统会把它视为新身份，需**再授权一次**；此后更新不再丢授权。
 建议同时在"系统设置 → 隐私与安全性"里删掉历史遗留的多个 KeyCount 条目。
 
@@ -172,8 +176,8 @@ ad-hoc 则每次构建 cdhash 都变，更新后往往要重新授权。
 KEYCOUNT_SIGN_ID="Developer ID Application: YOUR NAME (TEAMID)" ./build.sh
 ```
 
-签名与公证是两件事；默认产物仅用于本机验证，未公证，未验证跨架构分发。
-当前脚本生成本机架构的二进制。不要公开提交压缩包内的私钥或签名身份。
+签名与公证是两件事；默认产物未公证，脚本生成本机架构的二进制，
+Release 流水线分别构建两种架构。不要公开提交私钥或签名身份。
 `./make_dmg.sh` 不带 `--local` 时仅接受 Developer ID 签名的应用。
 文件名包含版本和架构（测试版额外含 `-local`），`dist/KeyCount.dmg` 同步指向本次内容。
 
@@ -208,7 +212,7 @@ KEYCOUNT_SIGN_ID="Developer ID Application: YOUR NAME (TEAMID)" ./build.sh
    诊断中包含用户目录路径，分享前可隐去用户名；不含输入内容。
 
 不自动运行 `tccutil`，不读写 TCC 数据库，不关闭 SIP/Gatekeeper，
-不导入项目里附带的私钥，不通过宽松的代码签名要求规避系统授权。
+不自动导入私钥，不通过宽松的代码签名要求规避系统授权。
 包内也包含 `安装与授权说明.txt`。
 
 ## 验证
@@ -223,13 +227,27 @@ KEYCOUNT_SIGN_ID="Developer ID Application: YOUR NAME (TEAMID)" ./build.sh
 
 `scripts/make_icons.swift` 是图标的矢量绘制源文件，负责统一的形状、配色、
 圆角、透明留白和多尺寸导出；无需联网或依赖图片生成服务即可重现。
+正式 bundle 使用 `Resources/Info.plist`，图标通过 `CFBundleIconFile` 接入。
 
 ## 持续集成
 
-GitHub Actions 会在每次提交和 Pull Request 上使用 macOS runner 运行
+GitHub Actions 会在分支提交和 Pull Request 上使用 macOS runner 运行
 `./test.sh`，检查计数逻辑、界面数据、授权生命周期、源码类型和脚本语法。
 
-正式发布暂不自动化：公开分发需要 Developer ID 签名和 Apple 公证凭据，
-这些凭据只应放在 GitHub Actions Secrets 中，不应提交到仓库。没有正式签名时，
-可以在本机使用 `./make_dmg.sh --local` 生成测试包。
-正式 bundle 使用 `Resources/Info.plist`，图标通过 `CFBundleIconFile` 接入。
+## 发布
+
+Release 流水线使用 ad-hoc 签名，不需要 Apple 开发者账号、Developer ID 证书或公证凭据。
+推送与 `Resources/Info.plist` 中版本号一致的标签，例如：
+
+```bash
+git tag v1.7.0
+git push origin v1.7.0
+```
+
+流水线会在 Apple Silicon 和 Intel runner 上分别运行测试、构建应用、生成未公证 DMG。
+两种架构都成功后，自动发布 GitHub Release，附上两个 DMG、`SHA256SUMS` 和安装说明。
+任一架构测试或构建失败，都不会执行发布。
+
+也可在 Actions 的 Release 工作流中手动运行，填写已有标签（如 `v1.7.0`）；
+构建内容始终取自该标签。已发布的版本不会自动覆盖，后续更新请提升版本号并创建新标签。
+在本机打包可运行 `./build.sh` 后再运行 `./make_dmg.sh --local`。

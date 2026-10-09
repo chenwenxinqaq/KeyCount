@@ -104,7 +104,7 @@ case "$SIGN_ID" in
     "-")
         echo "⚠️  这是 ad-hoc 临时签名，更换构建后可能需要重新授权。"
         echo "    运行 ./scripts/import_signing_cert.sh 可改用固定自签名身份，授权不再丢失。"
-        echo "    测试打包请显式运行 ./make_dmg.sh --local；正式分发必须使用 Developer ID。" ;;
+        echo "    运行 ./make_dmg.sh --local 可生成未公证 DMG；Developer ID 与公证可后续配置。" ;;
     "$LOCAL_IDENTITY")
         echo "🔏 已用固定自签名身份签名：designated requirement 绑定证书，TCC 授权可跨版本保留。"
         echo "    自签名未公证：首次打开仍需右键→打开，仅适合本机自用。"
